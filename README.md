@@ -1,2 +1,3 @@
-# times.jl
-Experiment with TIMES in Julia
+# TIMES.jl
+
+An experiment translating TIMES to Julia.
