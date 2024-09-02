@@ -9,8 +9,11 @@ using JuMP
             OBJ_PVT[r, t, cur] *
             COEF_CPT[r, v, t, p] *
             COEF_OBINV[r, v, p, cur] *
-            ((v in MILEYR && PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p])
-        ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in COEF_OBINV
+            (
+                (v in MILEYR && PrcNcap[r, v, p]) +
+                ([r, v, p] in eachindex(NCAP_PASTI) && NCAP_PASTI[r, v, p])
+            )
+        ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in eachindex(COEF_OBINV)
     ) == RegObj["OBJINV", r, cur]
 )
 
@@ -22,8 +25,11 @@ using JuMP
             OBJ_PVT[r, t, cur] *
             COEF_CPT[r, v, t, p] *
             COEF_OBFIX[r, v, p, cur] *
-            ((v in MILEYR && PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p])
-        ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in COEF_OBFIX
+            (
+                (v in MILEYR && PrcNcap[r, v, p]) +
+                ([r, v, p] in eachindex(NCAP_PASTI) && NCAP_PASTI[r, v, p])
+            )
+        ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in eachindex(COEF_OBFIX)
     ) == RegObj["OBJFIX", r, cur]
 )
 
@@ -34,12 +40,12 @@ using JuMP
         sum(
             (
                 (
-                    (r, t, p, cur) in OBJ_ACOST &&
+                    (r, t, p, cur) in eachindex(OBJ_ACOST) &&
                     sum(
                         OBJ_LINT[r, t, y, cur] * OBJ_ACOST[r, y, p, cur] for
                         y in LINTY[r, t, cur]
                     ) * sum(
-                        PrcAct[r, v, t, p, s] * (RP_STG[r, p] ? RS_STGAV[r, s] : 1) for
+                        PrcAct[r, v, t, p, s] * ((r, p) in RP_STG ? RS_STGAV[r, s] : 1) for
                         v in RTP_VNT[r, t, p] for s in RP_TS[r, p]
                     )
                 ) + (
@@ -52,7 +58,7 @@ using JuMP
                     )
                 )
             ) for t in MILEYR if (r, p, t) in RTP_VARA
-        ) for p in PROCESS if (r, p) in ISRP
+        ) for p in PROCESS if (r, p) in eachindex(ISRP)
     ) == RegObj["OBJVAR", r, cur]
 )
 
@@ -67,9 +73,9 @@ using JuMP
         s in TSLICE;
         (r, v, t, p) in RTP_VINTYR && (r, p) in PRC_ACT && s in RP_TS[r, p],
     ],
-    (RTP_VARA[r, p, t] * PrcAct[r, v, t, p, s]) == sum(
+    ((r, p, t) in RTP_VARA && PrcAct[r, v, t, p, s]) == sum(
         (
-            (r, p) in RP_ISIRE ?
+            (r, p) in RP_IRE ?
             sum(IreFlo[r, v, t, p, c, s, ie] for ie in IMPEXP if (r, p, ie) in RP_AIRE) :
             PrcFlo[r, v, t, p, c, s]
         ) for c in RP_PGC[r, p]
@@ -91,8 +97,9 @@ using JuMP
         (r, p) in RP_STG ?
         sum(
             PrcAct[r, v, y, p, ts] * RS_FR[r, ts, s] * exp(PRC_SC[r, p]) / RS_STGPRD[r, s]
-            for ts in RP_TS[r, p] if (r, s, ts) in RS_FR
-        ) : sum(PrcAct[r, v, y, p, ts] for ts in RP_TS[r, p] if (r, s, ts) in RS_FR)
+            for ts in RP_TS[r, p] if (r, s, ts) in eachindex(RS_FR)
+        ) :
+        sum(PrcAct[r, v, y, p, ts] for ts in RP_TS[r, p] if (r, s, ts) in eachindex(RS_FR))
     ) <= (
         ((r, p) in RP_STG ? 1 : G_YRFR[r, s]) *
         PRC_CAPACT[r, p] *
@@ -100,11 +107,11 @@ using JuMP
             COEF_AF[r, v, y, p, s, "UP"] *
             COEF_CPT[r, v, y, p] *
             (
-                (r, p) in PRC_VINT ? ((MILE[v] && PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) :
+                (r, p) in PRC_VINT ? ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) :
                 sum(
                     COEF_AF[r, m, y, p, s, "UP"] *
                     COEF_CPT[r, m, y, p] *
-                    ((MILE[m] && PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
+                    ((MILE[m] * PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
                     m in RTP_CPT[r, y, p]
                 )
             )
@@ -126,8 +133,9 @@ using JuMP
         (r, p) in RP_STG ?
         sum(
             PrcAct[r, v, y, p, ts] * RS_FR[r, ts, s] * exp(PRC_SC[r, p]) / RS_STGPRD[r, s]
-            for ts in RP_TS[r, p] if (r, s, ts) in RS_FR
-        ) : sum(PrcAct[r, v, y, p, ts] for ts in RP_TS[r, p] if (r, s, ts) in RS_FR)
+            for ts in RP_TS[r, p] if (r, s, ts) in eachindex(RS_FR)
+        ) :
+        sum(PrcAct[r, v, y, p, ts] for ts in RP_TS[r, p] if (r, s, ts) in eachindex(RS_FR))
     ) == (
         ((r, p) in RP_STG ? 1 : G_YRFR[r, s]) *
         PRC_CAPACT[r, p] *
@@ -135,11 +143,11 @@ using JuMP
             COEF_AF[r, v, y, p, s, "FX"] *
             COEF_CPT[r, v, y, p] *
             (
-                (r, p) in PRC_VINT ? ((MILE[v] && PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) :
+                (r, p) in PRC_VINT ? ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) :
                 sum(
                     COEF_AF[r, m, y, p, s, "FX"] *
                     COEF_CPT[r, m, y, p] *
-                    ((MILE[m] && PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
+                    ((MILE[m] * PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
                     m in RTP_CPT[r, y, p]
                 )
             )
@@ -154,7 +162,8 @@ using JuMP
         r in REGION,
         y in YEAR,
         p in PROCESS;
-        (r, y, p) in RTP && ((r, y, p) in RTP_VARP || (r, y, p, "FX") in CAP_BND),
+        (r, y, p) in RTP &&
+        ((r, y, p) in RTP_VARP || (r, y, p, "FX") in eachindex(CAP_BND)),
     ],
     ((r, y, p) in RTP_VARP ? PrcCap[r, y, p] : CAP_BND[r, y, p, "FX"]) == sum(
         COEF_CPT[r, v, y, p] * ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) for
@@ -168,7 +177,8 @@ using JuMP
         r in REGION,
         y in YEAR,
         p in PROCESS;
-        (r, y, p) in RTP && (!((r, y, p) in RTP_VARP) || (r, y, p, "LO") in CAP_BND),
+        (r, y, p) in RTP &&
+        (!((r, y, p) in RTP_VARP) || (r, y, p, "LO") in eachindex(CAP_BND)),
     ],
     ((r, y, p) in RTP_VARP ? PrcCap[r, y, p] : CAP_BND[r, y, p, "LO"]) <= sum(
         COEF_CPT[r, v, y, p] * ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) for
@@ -182,7 +192,8 @@ using JuMP
         r in REGION,
         y in YEAR,
         p in PROCESS;
-        (r, y, p) in RTP && (!((r, y, p) in RTP_VARP) || (r, y, p, "UP") in CAP_BND),
+        (r, y, p) in RTP &&
+        (!((r, y, p) in RTP_VARP) || (r, y, p, "UP") in eachindex(CAP_BND)),
     ],
     ((r, y, p) in RTP_VARP ? PrcCap[r, y, p] : CAP_BND[r, y, p, "UP"]) >= sum(
         COEF_CPT[r, v, y, p] * ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) for
@@ -202,7 +213,7 @@ using JuMP
         s in TSLICE,
         l in ["LO"],
         t in MILEYR;
-        (r, v, p, c, cg, s, l) in FLO_SHAR &&
+        (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, p, t) in RTP_VARA &&
         v in RTP_VNT[r, t, p] &&
         s in RPC_TS[r, p, c],
@@ -210,7 +221,8 @@ using JuMP
     sum(
         FLO_SHAR[r, v, p, c, cg, s, l] * sum(
             PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io] for
-            ts in RPC_TS[r, p, com] if ((r, cg, com) in COM_ISMEM && (r, s, ts) in RS_FR)
+            ts in RPC_TS[r, p, com] if
+            ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
         ) for io in INOUT if c in RPIO_C[r, p, io]
     ) <= PrcFlo[r, v, t, p, c, s]
 )
@@ -226,7 +238,7 @@ using JuMP
         s in TSLICE,
         l in ["UP"],
         t in MILEYR;
-        (r, v, p, c, cg, s, l) in FLO_SHAR &&
+        (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, p, t) in RTP_VARA &&
         v in RTP_VNT[r, t, p] &&
         s in RPC_TS[r, p, c],
@@ -234,7 +246,8 @@ using JuMP
     sum(
         FLO_SHAR[r, v, p, c, cg, s, l] * sum(
             PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io] for
-            ts in RPC_TS[r, p, com] if ((r, cg, com) in COM_ISMEM && (r, s, ts) in RS_FR)
+            ts in RPC_TS[r, p, com] if
+            ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
         ) for io in INOUT if c in RPIO_C[r, p, io]
     ) >= PrcFlo[r, v, t, p, c, s]
 )
@@ -250,7 +263,7 @@ using JuMP
         s in TSLICE,
         l in ["FX"],
         t in MILEYR;
-        (r, v, p, c, cg, s, l) in FLO_SHAR &&
+        (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, p, t) in RTP_VARA &&
         v in RTP_VNT[r, t, p] &&
         s in RPC_TS[r, p, c],
@@ -258,7 +271,8 @@ using JuMP
     sum(
         FLO_SHAR[r, v, p, c, cg, s, l] * sum(
             PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io] for
-            ts in RPC_TS[r, p, com] if ((r, cg, com) in COM_ISMEM && (r, s, ts) in RS_FR)
+            ts in RPC_TS[r, p, com] if
+            ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
         ) for io in INOUT if c in RPIO_C[r, p, io]
     ) == PrcFlo[r, v, t, p, c, s]
 )
@@ -283,10 +297,11 @@ using JuMP
     sum(
         sum(
             PrcFlo[r, v, t, p, c, ts] *
-            ((r, v, p, c, ts) in ACT_EFF ? ACT_EFF[r, v, p, c, ts] : 1) *
+            ((r, v, p, c, ts) in eachindex(ACT_EFF) ? ACT_EFF[r, v, p, c, ts] : 1) *
             RS_FR[r, s, ts] *
-            (1 + RTCS_FR[r, t, c, s, ts]) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
-        ) for c in RP_ACE[r, p] if COM_ISMEM[r, cg, c]
+            (1 + RTCS_FR[r, t, c, s, ts]) for
+            ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
+        ) for c in RP_ACE[r, p] if (r, cg, c) in COM_GMAP
     ) == sum(
         RS_FR[r, s, ts] * (
             (r, p) in RP_PGFLO ?
@@ -294,10 +309,11 @@ using JuMP
                 (
                     (r, p) in RP_PGACT ? PrcAct[r, v, t, p, ts] :
                     PrcFlo[r, v, t, p, c, ts] / PRC_ACTFLO[r, v, p, c]
-                ) / ((r, v, p, c, ts) in ACT_EFF ? ACT_EFF[r, v, p, c, ts] : 1) *
+                ) / ((r, v, p, c, ts) in eachindex(ACT_EFF) ? ACT_EFF[r, v, p, c, ts] : 1) *
                 (1 + RTCS_FR[r, t, c, s, ts]) for c in RP_PGC[r, p]
             ) : PrcAct[r, v, t, p, ts]
-        ) / max(1e-6, ACT_EFF[r, v, p, cg, ts]) for ts in RP_TS[r, p] if (r, s, ts) in RS_FR
+        ) / max(1e-6, ACT_EFF[r, v, p, cg, ts]) for
+        ts in RP_TS[r, p] if (r, s, ts) in eachindex(RS_FR)
     )
 )
 
@@ -314,7 +330,7 @@ using JuMP
         v in MODLYR,
         s in TSLICE;
         (r, p, cg1, cg2, s1) in RP_PTRAN &&
-        (r, s1, s) in RS_FR &&
+        (r, s1, s) in eachindex(RS_FR) &&
         s in RP_S1[r, p] &&
         (r, p, t) in RTP_VARA &&
         v in RTP_VNT[r, t, p],
@@ -322,15 +338,15 @@ using JuMP
     sum(
         sum(
             PrcFlo[r, v, t, p, c, ts] * RS_FR[r, s, ts] * (1 + RTCS_FR[r, t, c, s, ts]) for
-            ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
-        ) for io in INOUT for c in RPIO_C[r, p, io] if (r, cg2, c) in COM_ISMEM
+            ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
+        ) for io in INOUT for c in RPIO_C[r, p, io] if (r, cg2, c) in COM_GMAP
     ) == sum(
         COEF_PTRAN[r, v, p, cg1, c, cg2, ts] *
         RS_FR[r, s, ts] *
         (1 + RTCS_FR[r, t, c, s, ts]) *
         PrcFlo[r, v, t, p, c, ts] for io in INOUT for c in RPIO_C[r, p, io] for
         ts in RPC_TS[r, p, c] if
-        ((r, s, ts) in RS_FR ? COEF_PTRAN[r, v, p, cg1, c, cg2, ts] : 0)
+        ((r, s, ts) in eachindex(RS_FR) ? COEF_PTRAN[r, v, p, cg1, c, cg2, ts] : 0)
     )
 )
 
@@ -358,17 +374,16 @@ using JuMP
                                 RS_FR[r, s, ts] *
                                 (1 + RTCS_FR[r, t, c, s, ts]) *
                                 STG_EFF[r, v, p] for v in RTP_VNT[r, t, p]
-                            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                         ) :
                         sum(
                             sum(
                                 PrcFlo[r, v, t, p, c, ts] *
                                 RS_FR[r, s, ts] *
                                 (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                         )
-                    ) for p in RCIO_P[r, c, "OUT"] if (r, p, t) in RTP_VARA;
-                    init = 0,
+                    ) for p in RCIO_P[r, c, "OUT"] if (r, p, t) in RTP_VARA
                 ) : 0
             ) + (
                 (r, c, "IMP") in RCIE_P ?
@@ -378,9 +393,8 @@ using JuMP
                             IreFlo[r, v, t, p, c, ts, "IMP"] *
                             RS_FR[r, s, ts] *
                             (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
-                    ) for p in RCIE_P[r, c, "IMP"] if (r, p, t) in RTP_VARA;
-                    init = 0,
+                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
+                    ) for p in RCIE_P[r, c, "IMP"] if (r, p, t) in RTP_VARA
                 ) : 0
             )
         ) * COM_IE[r, t, c, s]
@@ -395,14 +409,14 @@ using JuMP
                         StgFlo[r, v, t, p, c, ts, "IN"] *
                         RS_FR[r, s, ts] *
                         (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                 ) :
                 (sum(
                     sum(
                         PrcFlo[r, v, t, p, c, ts] *
                         RS_FR[r, s, ts] *
                         (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                 ))
             ) for p in RCIO_P[r, c, "IN"] if (r, p, t) in RTP_VARA
         ) : 0
@@ -415,11 +429,11 @@ using JuMP
                     IreFlo[r, v, t, p, c, ts, "EXP"] *
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             ) for p in RCIE_P[r, c, "EXP"] if (r, p, t) in RTP_VARA
         ) : 0
     ) +
-    ((r, t, c) in COM_PROJ ? COM_PROJ[r, t, c] * COM_FR[r, t, c, s] : 0)
+    ((r, t, c) in eachindex(COM_PROJ) ? COM_PROJ[r, t, c] * COM_FR[r, t, c, s] : 0)
 )
 
 # %% Commodity Balance - Equal
@@ -444,14 +458,14 @@ using JuMP
                             RS_FR[r, s, ts] *
                             (1 + RTCS_FR[r, t, c, s, ts]) *
                             STG_EFF[r, v, p] for v in RTP_VNT[r, t, p]
-                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                     ) :
                     (sum(
                         sum(
                             PrcFlo[r, v, t, p, c, ts] *
                             RS_FR[r, s, ts] *
                             (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                        ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                     ))
                 ) for p in RCIO_P[r, c, "OUT"] if (r, p, t) in RTP_VARA
             ) + sum(
@@ -460,7 +474,7 @@ using JuMP
                         IreFlo[r, v, t, p, c, ts, "IMP"] *
                         RS_FR[r, s, ts] *
                         (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                    ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
                 ) for p in RCIE_P[r, c, "IMP"] if (r, p, t) in RTP_VARA
             )
         ) * COM_IE[r, t, c, s]
@@ -473,14 +487,14 @@ using JuMP
                     StgFlo[r, v, t, p, c, ts, "IN"] *
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             ) :
             (sum(
                 sum(
                     PrcFlo[r, v, t, p, c, ts] *
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             ))
         ) for p in RCIO_P[r, c, "IN"] if (r, p, t) in RTP_VARA
     ) +
@@ -490,11 +504,11 @@ using JuMP
                 IreFlo[r, v, t, p, c, ts, "EXP"] *
                 RS_FR[r, s, ts] *
                 (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+            ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
         ) for p in RCIE_P[r, c, "EXP"] if (r, p, t) in RTP_VARA
     ) +
     RHS_COMBAL[r, t, c, s] * ComNet[r, t, c, s] +
-    ((r, t, c) in COM_PROJ ? COM_PROJ[r, t, c] * COM_FR[r, t, c, s] : 0)
+    ((r, t, c) in eachindex(COM_PROJ) ? COM_PROJ[r, t, c] * COM_FR[r, t, c, s] : 0)
 )
 
 # %% Commodity Production
@@ -516,14 +530,14 @@ using JuMP
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) *
                     STG_EFF[r, v, p] for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_RF
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             ) :
             sum(
                 sum(
                     PrcFlo[r, v, t, p, c, ts] *
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             )
         ) + sum(
             sum(
@@ -531,7 +545,7 @@ using JuMP
                     IreFlo[r, v, t, p, c, ts, "IMP"] *
                     RS_FR[r, s, ts] *
                     (1 + RTCS_FR[r, t, c, s, ts]) for v in RTP_VNT[r, t, p]
-                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in RS_FR
+                ) for ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
             ) for p in RCIE_P[r, c, "IMP"] if (r, p, t) in RTP_VARA
         ) for p in RCIO_P[r, c, "OUT"] if (r, p, t) in RTP_VARA
     ) * COM_IE[r, t, c, s] == ComPrd[r, t, c, s]
