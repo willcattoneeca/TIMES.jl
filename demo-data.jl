@@ -122,11 +122,13 @@ function read_data(queries::Vector{Dict{String,String}})::Dict{String,Any}
     data = Dict()
     for q in queries
         df = DataFrame(con.execute(db, q["query"]))
+        row_number = nrow(df)
+        col_number = ncol(df)
         # One-dimensional set
-        if nrow(df) > 0 && ncol(df) == 1
+        if row_number > 0 && col_number == 1
             data[q["entity"]] = Set(values(df[!, 1]))
             # Multi-dimensional set or parameter
-        elseif nrow(df) > 0 && ncol(df) > 1
+        elseif row_number > 0 && col_number > 1
             if "value" in names(df)
                 dict = OrderedDict(Tuple.(eachrow(df[:, Not(:value)])) .=> df.value)
                 data[q["entity"]] = Containers.SparseAxisArray(dict)

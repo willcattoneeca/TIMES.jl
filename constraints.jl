@@ -39,16 +39,16 @@ using JuMP
     sum(
         sum(
             (
-                (r, t, p, cur) in eachindex(OBJ_ACOST) ?
+                (r, p, cur, t) in eachindex(OBJ_ACOST) ?
                 sum(
-                    OBJ_LINT[r, t, y, cur] * OBJ_ACOST[r, y, p, cur] for
+                    OBJ_LINT[r, t, y, cur] * OBJ_ACOST[r, p, cur, y] for
                     y in LINTY[r, t, cur]
                 ) * sum(
                     PrcAct[r, v, t, p, s] * ((r, p) in RP_STG ? RS_STGAV[r, s] : 1) for
                     v in RTP_VNT[r, t, p] for s in RP_TS[r, p]
                 ) : 0
             ) + (
-                (r, p, t, cur) in RTP_IPRI ?
+                (r, t, p, cur) in RTP_IPRI ?
                 sum(
                     sum(
                         OBJ_LINT[r, t, y, cur] * OBJ_IPRIC[r, y, p, c, s, ie, cur] for
@@ -57,7 +57,7 @@ using JuMP
                     s in RP_TS[r, p] for (c, ie) in RP_CIE[r, p]
                 ) : 0
             ) for t in MILEYR if (r, t, p) in RTP_VARA
-        ) for p in PROCESS if (r, p) in eachindex(ISRP)
+        ) for p in PROCESS if (r, p) in RP
     ) == RegObj["OBJVAR", r, cur]
 )
 
@@ -225,12 +225,12 @@ using JuMP
     model,
     EQL_FLOSHR[
         r in REGION,
-        v in YEAR,
+        v in MODLYR,
         p in PROCESS,
         c in COMMTY,
         cg in COMGRP,
         s in TSLICE,
-        l = "LO",
+        l in ["LO"],
         t in MILEYR;
         (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, t, p) in RTP_VARA &&
@@ -250,12 +250,12 @@ using JuMP
     model,
     EQG_FLOSHR[
         r in REGION,
-        v in YEAR,
+        v in MODLYR,
         p in PROCESS,
         c in COMMTY,
         cg in COMGRP,
         s in TSLICE,
-        l = "UP",
+        l in ["UP"],
         t in MILEYR;
         (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, t, p) in RTP_VARA &&
@@ -275,28 +275,28 @@ using JuMP
     model,
     EQE_FLOSHR[
         r in REGION,
-        v in YEAR,
+        v in MODLYR,
         p in PROCESS,
         c in COMMTY,
         cg in COMGRP,
         s in TSLICE,
-        l = "FX",
+        l in ["FX"],
         t in MILEYR;
         (r, v, p, c, cg, s, l) in eachindex(FLO_SHAR) &&
         (r, t, p) in RTP_VARA &&
         v in RTP_VNT[r, t, p] &&
         s in RPC_TS[r, p, c],
     ],
-    sum(
+    (sum(
         FLO_SHAR[r, v, p, c, cg, s, l] * sum(
             PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io] for
             ts in RPC_TS[r, p, com] if
             ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
         ) for io in INOUT if c in RPIO_C[r, p, io]
-    ) == PrcFlo[r, v, t, p, c, s]
+    ) == PrcFlo[r, v, t, p, c, s])
 )
 
-# %% Activity efficiency
+# %% Activity efficiency:
 @constraint(
     model,
     EQE_ACTEFF[
@@ -313,6 +313,7 @@ using JuMP
         (r, t, p) in RTP_VARA &&
         v in RTP_VNT[r, t, p],
     ],
+    (!isnothing(RP_ACE) ?
     sum(
         sum(
             PrcFlo[r, v, t, p, c, ts] *
@@ -321,7 +322,8 @@ using JuMP
             (1 + RTCS_FR[r, t, c, s, ts]) for
             ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
         ) for c in RP_ACE[r, p] if (r, cg, c) in COM_GMAP
-    ) == sum(
+    ) :
+    0) == sum(
         RS_FR[r, s, ts] * (
             (r, p) in RP_PGFLO ?
             sum(

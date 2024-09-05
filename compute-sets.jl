@@ -1,6 +1,11 @@
 using JuMP;
 
-LINTY = Set(((r, t, cur) for (r, t, y, cur) in IS_LINT if y in MODLYR))
+LINTY = Containers.SparseAxisArray(
+    Dict(
+        (r, t, cur) => [y for y in MODLYR if (r, t, y, cur) in IS_LINT] for
+        (r, t, y, cur) in IS_LINT
+    ),
+)
 
 RTP_VNT = Containers.SparseAxisArray(
     Dict(
@@ -69,4 +74,10 @@ RCIE_P = Containers.SparseAxisArray(
     ),
 )
 
-#RP_ACE = Containers.SparseAxisArray(Dict((r, p) => [c for c in COMMTY if (r, p, c) in RPC_ACE] for (r, p, c) in RPC_ACE))
+RP_ACE =
+    !isnothing(RPC_ACE) ?
+    Containers.SparseAxisArray(
+        Dict(
+            (r, p) => [c for c in COMMTY if (r, p, c) in RPC_ACE] for (r, p, c) in RPC_ACE
+        ),
+    ) : nothing
