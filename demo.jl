@@ -1,6 +1,6 @@
 using JuMP;
-#using HiGHS;
-using GAMS;
+using HiGHS;
+#using GAMS;
 
 model = Model()
 # Sets
@@ -19,9 +19,9 @@ include("variables.jl")
 # Specify constraints
 include("constraints.jl")
 # Set solver
-#set_optimizer(model, HiGHS.Optimizer)
-set_optimizer(model, GAMS.Optimizer)
-set_optimizer_attribute(model, GAMS.Solver(), "CPLEX")
+set_optimizer(model, HiGHS.Optimizer)
+#set_optimizer(model, GAMS.Optimizer)
+#set_optimizer_attribute(model, GAMS.Solver(), "CPLEX")
 # Solve model
 optimize!(model)
 # Print solution summary
