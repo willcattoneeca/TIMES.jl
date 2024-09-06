@@ -11,7 +11,7 @@ using JuMP
             COEF_OBINV[r, v, p, cur] *
             (
                 (v in MILEYR ? PrcNcap[r, v, p] : 0) +
-                ([r, v, p] in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
+                ((r, v, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
             )
         ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in eachindex(COEF_OBINV)
     ) == RegObj["OBJINV", r, cur]
@@ -27,7 +27,7 @@ using JuMP
             COEF_OBFIX[r, v, p, cur] *
             (
                 (v in MILEYR ? PrcNcap[r, v, p] : 0) +
-                ([r, v, p] in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
+                ((r, v, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
             )
         ) for (r, v, t, p) in RTP_CPTYR if (r, v, p, cur) in eachindex(COEF_OBFIX)
     ) == RegObj["OBJFIX", r, cur]
@@ -107,26 +107,25 @@ using JuMP
         ((r, p) in RP_STG ? 1 : G_YRFR[r, s]) *
         PRC_CAPACT[r, p] *
         (
+            (r, p) in PRC_VINT ?
             COEF_AF[r, v, y, p, s, "UP"] *
             COEF_CPT[r, v, y, p] *
             (
-                (r, p) in PRC_VINT ?
+                MILE[v] * PrcNcap[r, v, p] +
+                ((r, v, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
+            ) :
+            sum(
+                COEF_AF[r, m, y, p, s, "UP"] *
+                COEF_CPT[r, m, y, p] *
                 (
-                    (MILE[v] * PrcNcap[r, v, p]) +
-                    ((r, v, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, v, p] : 0)
-                ) :
-                sum(
-                    COEF_AF[r, m, y, p, s, "UP"] *
-                    COEF_CPT[r, m, y, p] *
-                    (
-                        (MILE[m] * PrcNcap[r, m, p]) +
-                        ((r, m, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, m, p] : 0)
-                    ) for m in RTP_CPT[r, y, p]
-                )
+                    (MILE[m] * PrcNcap[r, m, p]) +
+                    ((r, m, p) in eachindex(NCAP_PASTI) ? NCAP_PASTI[r, m, p] : 0)
+                ) for m in RTP_CPT[r, y, p]
             )
         )
     )
 )
+
 
 @constraint(
     model,
@@ -153,16 +152,15 @@ using JuMP
         ((r, p) in RP_STG ? 1 : G_YRFR[r, s]) *
         PRC_CAPACT[r, p] *
         (
+            (r, p) in PRC_VINT ?
             COEF_AF[r, v, y, p, s, "FX"] *
             COEF_CPT[r, v, y, p] *
-            (
-                (r, p) in PRC_VINT ? ((MILE[v] * PrcNcap[r, v, p]) + NCAP_PASTI[r, v, p]) :
-                sum(
-                    COEF_AF[r, m, y, p, s, "FX"] *
-                    COEF_CPT[r, m, y, p] *
-                    ((MILE[m] * PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
-                    m in RTP_CPT[r, y, p]
-                )
+            (MILE[v] * PrcNcap[r, v, p] + NCAP_PASTI[r, v, p]) :
+            sum(
+                COEF_AF[r, m, y, p, s, "FX"] *
+                COEF_CPT[r, m, y, p] *
+                ((MILE[m] * PrcNcap[r, m, p]) + NCAP_PASTI[r, m, p]) for
+                m in RTP_CPT[r, y, p]
             )
         )
     )
@@ -287,13 +285,15 @@ using JuMP
         v in RTP_VNT[r, t, p] &&
         s in RPC_TS[r, p, c],
     ],
-    (sum(
-        FLO_SHAR[r, v, p, c, cg, s, l] * sum(
-            PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io] for
-            ts in RPC_TS[r, p, com] if
-            ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
-        ) for io in INOUT if c in RPIO_C[r, p, io]
-    ) == PrcFlo[r, v, t, p, c, s])
+    (
+        sum(
+            FLO_SHAR[r, v, p, c, cg, s, l] * sum(
+                PrcFlo[r, v, t, p, com, ts] * RS_FR[r, s, ts] for com in RPIO_C[r, p, io]
+                for ts in RPC_TS[r, p, com] if
+                ((r, cg, com) in COM_GMAP && (r, s, ts) in eachindex(RS_FR))
+            ) for io in INOUT if c in RPIO_C[r, p, io]
+        ) == PrcFlo[r, v, t, p, c, s]
+    )
 )
 
 # %% Activity efficiency:
@@ -313,17 +313,18 @@ using JuMP
         (r, t, p) in RTP_VARA &&
         v in RTP_VNT[r, t, p],
     ],
-    (!isnothing(RP_ACE) ?
-    sum(
+    (
+        !isnothing(RP_ACE) ?
         sum(
-            PrcFlo[r, v, t, p, c, ts] *
-            ((r, v, p, c, ts) in eachindex(ACT_EFF) ? ACT_EFF[r, v, p, c, ts] : 1) *
-            RS_FR[r, s, ts] *
-            (1 + RTCS_FR[r, t, c, s, ts]) for
-            ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
-        ) for c in RP_ACE[r, p] if (r, cg, c) in COM_GMAP
-    ) :
-    0) == sum(
+            sum(
+                PrcFlo[r, v, t, p, c, ts] *
+                ((r, v, p, c, ts) in eachindex(ACT_EFF) ? ACT_EFF[r, v, p, c, ts] : 1) *
+                RS_FR[r, s, ts] *
+                (1 + RTCS_FR[r, t, c, s, ts]) for
+                ts in RPC_TS[r, p, c] if (r, s, ts) in eachindex(RS_FR)
+            ) for c in RP_ACE[r, p] if (r, cg, c) in COM_GMAP
+        ) : 0
+    ) == sum(
         RS_FR[r, s, ts] * (
             (r, p) in RP_PGFLO ?
             sum(
