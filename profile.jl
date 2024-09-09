@@ -11,7 +11,7 @@ using ProfileView
 
 function run_model()
 
-    @time "create model" begin
+    @time "Create model" begin
         model = Model()
     end
 
@@ -29,7 +29,7 @@ function run_model()
             "NRG",         # Energy
             "MAT",         # Material
             "ENV",         # Environmental
-            "FIN",          # Financial
+            "FIN",         # Financial
         ])
 
         PRC_GRP = Set([
@@ -50,7 +50,7 @@ function run_model()
             "IRE",     # Inter-region exchange (IMPort/EXPort)
             "STK",     # Stockpiling
             "MISC",    # Miscellaneous
-            "STS",      # Time-slice storage (excluding night storages)
+            "STS",     # Time-slice storage (excluding night storages)
         ])
 
         UPT = Set(["COLD", "WARM", "HOT"])
@@ -370,6 +370,7 @@ function run_model()
 
     @time "Variables" begin
 
+
         function PrcCap_bounds(r, y, p, bd)
             if (r, y, p, bd) in eachindex(CAP_BND)
                 return CAP_BND[r, y, p, bd]
@@ -400,31 +401,90 @@ function run_model()
         @variable(model, ComNet[REGION, MILEYR, COMMTY, TSLICE] >= 0)
         @variable(
             model,
-            PrcCap_bounds(r, y, p, "LO") <=
-            PrcCap[r in REGION, y in MODLYR, p in PROCESS] <=
-            PrcCap_bounds(r, y, p, "UP")
+            PrcCap_bounds(r, v, p, "LO") <=
+            PrcCap[r in REGION, v in MODLYR, p in PROCESS] <=
+            PrcCap_bounds(r, v, p, "UP")
         )
         @variable(
             model,
-            PrcNcap_bounds(r, y, p, "LO") <=
-            PrcNcap[r in REGION, y in MODLYR, p in PROCESS] <=
-            PrcNcap_bounds(r, y, p, "UP")
+            PrcNcap_bounds(r, v, p, "LO") <=
+            PrcNcap[r in REGION, v in MODLYR, p in PROCESS] <=
+            PrcNcap_bounds(r, v, p, "UP")
         )
-        @variable(model, PrcAct[REGION, MODLYR, MILEYR, PROCESS, TSLICE] >= 0)
-        @variable(model, PrcFlo[REGION, MODLYR, MILEYR, PROCESS, COMMTY, TSLICE] >= 0)
-        @variable(model, IreFlo[REGION, MODLYR, MILEYR, PROCESS, COMMTY, TSLICE, IMPEXP] >= 0)
-        @variable(model, StgFlo[REGION, MODLYR, MILEYR, PROCESS, COMMTY, TSLICE, INOUT] >= 0)
+        @variable(
+            model,
+            PrcAct[
+                r in REGION,
+                v in MODLYR,
+                t in MILEYR,
+                p in PROCESS,
+                s in TSLICE;
+                ((r, t, p) in RTP_VARA) && ((r, v, t, p) in RTP_VINTYR) && ((r, p, s) in PRC_TS),
+            ] >= 0
+        )
+        @variable(
+            model,
+            PrcFlo[
+                r in REGION,
+                v in MODLYR,
+                t in MILEYR,
+                p in PROCESS,
+                c in COMMTY,
+                s in TSLICE;
+                ((r, p) in RP_FLO) &&
+                ((r, t, p) in RTP_VARA) &&
+                ((r, v, t, p) in RTP_VINTYR) &&
+                ((r, p, c) in RPC) &&
+                ((r, p, c, s) in RPCS_VAR),
+            ] >= 0
+        )
+        @variable(
+            model,
+            IreFlo[
+                r in REGION,
+                v in MODLYR,
+                t in MILEYR,
+                p in PROCESS,
+                c in COMMTY,
+                s in TSLICE,
+                ie in IMPEXP;
+                ((r, p) in RP_IRE) &&
+                ((r, t, p) in RTP_VARA) &&
+                ((r, v, t, p) in RTP_VINTYR) &&
+                ((r, p, c) in RPC) &&
+                ((r, p, s) in PRC_TS) &&
+                ((r, p, c, ie) in RPC_IRE),
+            ] >= 0
+        )
+        @variable(
+            model,
+            StgFlo[
+                r in REGION,
+                v in MODLYR,
+                t in MILEYR,
+                p in PROCESS,
+                c in COMMTY,
+                s in TSLICE,
+                io in INOUT;
+                ((r, p) in RP_STG) &&
+                ((r, t, p) in RTP_VARA) &&
+                ((r, v, t, p) in RTP_VINTYR) &&
+                ((r, p, c) in RPC) &&
+                ((r, p, s) in PRC_TS) &&
+                ((r, p, c, io) in TOP),
+            ] >= 0
+        )
         
     end
 
-    @time "Objective" begin 
+    @time "Objective" begin
         @expression(model, obj, sum(RegObj[o, r, cur] for o in OBV for (r, cur) in RDCUR))
         @objective(model, Min, obj)
     end
 
     @time "Constraints" begin
         # Objective function constituents
-        @constraint(
+        @time "EQ_OBJINV" @constraint(
             model,
             EQ_OBJINV[r in REGION, cur in CURRENCY; (r, cur) in RDCUR],
             sum(
@@ -440,7 +500,7 @@ function run_model()
             ) == RegObj["OBJINV", r, cur]
         )
 
-        @constraint(
+        @time "EQ_OBJFIX" @constraint(
             model,
             EQ_OBJFIX[r in REGION, cur in CURRENCY; (r, cur) in RDCUR],
             sum(
@@ -456,7 +516,7 @@ function run_model()
             ) == RegObj["OBJFIX", r, cur]
         )
 
-        @constraint(
+        @time "EQ_OBJVAR" @constraint(
             model,
             EQ_OBJVAR[r in REGION, cur in CURRENCY; (r, cur) in RDCUR],
             sum(
@@ -485,7 +545,7 @@ function run_model()
         )
 
         # %% Activity to Primary Group
-        @constraint(
+        @time "EQ_ACTFLO" @constraint(
             model,
             EQ_ACTFLO[
                 r in REGION,
@@ -505,7 +565,7 @@ function run_model()
         )
 
         # %% Activity to Capacity
-        @constraint(
+        @time "EQL_CAPACT" @constraint(
             model,
             EQL_CAPACT[
                 r in REGION,
@@ -550,7 +610,7 @@ function run_model()
         )
 
 
-        @constraint(
+        @time "EQE_CAPACT" @constraint(
             model,
             EQE_CAPACT[
                 r in REGION,
@@ -590,7 +650,7 @@ function run_model()
         )
 
         # %% Capacity Transfer
-        @constraint(
+        @time "EQE_CPT" @constraint(
             model,
             EQE_CPT[
                 r in REGION,
@@ -607,7 +667,7 @@ function run_model()
             )
         )
 
-        @constraint(
+        @time "EQL_CPT" @constraint(
             model,
             EQL_CPT[
                 r in REGION,
@@ -624,7 +684,7 @@ function run_model()
             )
         )
 
-        @constraint(
+        @time "EQG_CPT" @constraint(
             model,
             EQG_CPT[
                 r in REGION,
@@ -642,7 +702,7 @@ function run_model()
         )
 
         # %% Process Flow Shares
-        @constraint(
+        @time "EQL_FLOSHR" @constraint(
             model,
             EQL_FLOSHR[
                 r in REGION,
@@ -667,7 +727,7 @@ function run_model()
             ) <= PrcFlo[r, v, t, p, c, s]
         )
 
-        @constraint(
+        @time "EQL_FLOSHR" @constraint(
             model,
             EQG_FLOSHR[
                 r in REGION,
@@ -692,7 +752,7 @@ function run_model()
             ) >= PrcFlo[r, v, t, p, c, s]
         )
 
-        @constraint(
+        @time "EQL_FLOSHR" @constraint(
             model,
             EQE_FLOSHR[
                 r in REGION,
@@ -720,7 +780,7 @@ function run_model()
         )
 
         # %% Activity efficiency:
-        @constraint(
+        @time "EQE_ACTEFF" @constraint(
             model,
             EQE_ACTEFF[
                 r in REGION,
@@ -762,8 +822,8 @@ function run_model()
             )
         )
 
-        # %% Process Transformation
-        @constraint(
+        # %% Process Transformation SLOW
+        @time "EQ_PTRANS" @constraint(
             model,
             EQ_PTRANS[
                 r in REGION,
@@ -799,8 +859,9 @@ function run_model()
             )
         )
 
+
         # %% Commodity Balance - Greater
-        @constraint(
+        @time "EQG_COMBAL" @constraint(
             model,
             EQG_COMBAL[
                 r in REGION,
@@ -916,7 +977,7 @@ function run_model()
         )
 
         # %% Commodity Balance - Equal
-        @constraint(
+        @time "EQE_COMBAL" @constraint(
             model,
             EQE_COMBAL[
                 r in REGION,
@@ -1017,7 +1078,7 @@ function run_model()
         )
 
         # %% Commodity Production
-        @constraint(
+        @time "EQE_COMPRD" @constraint(
             model,
             EQE_COMPRD[
                 r in REGION,
@@ -1072,7 +1133,7 @@ function run_model()
         )
 
         # %% Timeslice Storage Transformation
-        @constraint(
+        @time "EQ_STGTSS" @constraint(
             model,
             EQ_STGTSS[
                 r in REGION,
