@@ -244,23 +244,7 @@ function run_model()
             data = Dict()
             for q in queries
                 df = DataFrame(con.execute(db, q["query"]))
-                row_number = nrow(df)
-                col_number = ncol(df)
-                # One-dimensional set
-                if row_number > 0 && col_number == 1
-                    data[q["entity"]] = Set(values(df[!, 1]))
-                    # Multi-dimensional set or parameter
-                elseif row_number > 0 && col_number > 1
-                    if "value" in names(df)
-                        dict = OrderedDict(Tuple.(eachrow(df[:, Not(:value)])) .=> df.value)
-                        data[q["entity"]] = Containers.SparseAxisArray(dict)
-                    else
-                        data[q["entity"]] = Set(Tuple.(eachrow(df)))
-                    end
-                    # Empty set or parameter
-                else
-                    data[q["entity"]] = nothing
-                end
+                data[q["entity"]] = df
             end
             return data
         end
@@ -268,16 +252,30 @@ function run_model()
         data = read_data(queries)
 
         # Create global variables
-        symbol = nothing
-        val = nothing
+        symbol, val = nothing, nothing
 
         # Create sets and parameters by iterating through data and changing values of global variables
-        for (k, v) in data
-            global symbol = k
-            global val = v
+        for (k, df) in data
+            row_number = nrow(df)
+            col_number = ncol(df)
+            # One-dimensional set
+            if row_number > 0 && col_number == 1
+                v = Set(values(df[!, 1]))
+                # Multi-dimensional set or parameter
+            elseif row_number > 0 && col_number > 1
+                if "value" in names(df)
+                    dict = OrderedDict(Tuple.(eachrow(df[:, Not(:value)])) .=> df.value)
+                    v = Containers.SparseAxisArray(dict)
+                else
+                    v = Set(Tuple.(eachrow(df)))
+                end
+                # Empty set or parameter
+            else
+                v = nothing
+            end
+            global symbol, val = (k, v)
             create_symbol(symbol, val)
         end
-
     end
 
     @time "Parameters" begin
@@ -707,7 +705,7 @@ function run_model()
             EQL_FLOSHR[
                 r in REGION,
                 v in MODLYR,
-                p in PROCESS,
+                p in [p for p in PROCESS if (r,p) in RP],
                 c in COMMTY,
                 cg in COMGRP,
                 s in TSLICE,
@@ -732,7 +730,7 @@ function run_model()
             EQG_FLOSHR[
                 r in REGION,
                 v in MODLYR,
-                p in PROCESS,
+                p in [p for p in PROCESS if (r,p) in RP],
                 c in COMMTY,
                 cg in COMGRP,
                 s in TSLICE,
@@ -757,7 +755,7 @@ function run_model()
             EQE_FLOSHR[
                 r in REGION,
                 v in MODLYR,
-                p in PROCESS,
+                p in [p for p in PROCESS if (r,p) in RP],
                 c in COMMTY,
                 cg in COMGRP,
                 s in TSLICE,
@@ -827,16 +825,15 @@ function run_model()
             model,
             EQ_PTRANS[
                 r in REGION,
-                p in PROCESS,
+                p in [p for p in PROCESS if (r,p) in RP],
                 cg1 in COMGRP,
                 cg2 in COMGRP,
                 s1 in TSLICE,
                 t in MILEYR,
                 v in MODLYR,
-                s in TSLICE;
+                s in RP_S1[r, p];
                 (r, p, cg1, cg2, s1) in RP_PTRAN &&
                 (r, s1, s) in eachindex(RS_FR) &&
-                s in RP_S1[r, p] &&
                 (r, t, p) in RTP_VARA &&
                 v in RTP_VNT[r, t, p],
             ],
